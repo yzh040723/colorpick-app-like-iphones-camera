@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 深色圆角底座 + 亮黄描边 -->
+    <path
+        android:fillColor="#151518"
+        android:strokeColor="#FFD60A"
+        android:strokeWidth="2.5"
+        android:pathData="M15,13h78a14,14 0 0 1 14,14v54a14,14 0 0 1 -14,14h-78a14,14 0 0 1 -14,-14v-54a14,14 0 0 1 14,-14z" />
+    <!-- 取景器凸起 -->
+    <path
+        android:fillColor="#F5F5F7"
+        android:pathData="M42,21h24a7,7 0 0 1 7,7v4a7,7 0 0 1 -7,7h-24a7,7 0 0 1 -7,-7v-4a7,7 0 0 1 7,-7z" />
+    <!-- 相机机身 -->
+    <path
+        android:fillColor="#F5F5F7"
+        android:pathData="M20,35h68a10,10 0 0 1 10,10v22a10,10 0 0 1 -10,10h-68a10,10 0 0 1 -10,-10v-22a10,10 0 0 1 10,-10z" />
+    <!-- 镜头外环 -->
+    <path
+        android:fillColor="#151518"
+        android:pathData="M54,57m-16,0a16,16 0 1,1 32,0a16,16 0 1,1 -32,0" />
+    <!-- 镜头黄色光圈 -->
+    <path
+        android:fillColor="#FFD60A"
+        android:pathData="M54,57m-11,0a11,11 0 1,1 22,0a11,11 0 1,1 -22,0" />
+    <!-- 镜头深色内圈 -->
+    <path
+        android:fillColor="#151518"
+        android:pathData="M54,57m-7,0a7,7 0 1,1 14,0a7,7 0 1,1 -14,0" />
+    <!-- 调色点阵（呼应 11×11 点阵调色盘） -->
+    <path
+        android:fillColor="#FF4D5E"
+        android:pathData="M50,53m-2.5,0a2.5,2.5 0 1,1 5,0a2.5,2.5 0 1,1 -5,0" />
+    <path
+        android:fillColor="#3DDC84"
+        android:pathData="M58,53m-2.5,0a2.5,2.5 0 1,1 5,0a2.5,2.5 0 1,1 -5,0" />
+    <path
+        android:fillColor="#4DA6FF"
+        android:pathData="M50,61m-2.5,0a2.5,2.5 0 1,1 5,0a2.5,2.5 0 1,1 -5,0" />
+    <path
+        android:fillColor="#FFD60A"
+        android:pathData="M58,61m-2.5,0a2.5,2.5 0 1,1 5,0a2.5,2.5 0 1,1 -5,0" />
+    <!-- 镜头玻璃高光 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M45.5,50.5m-2.5,0a2.5,2.5 0 1,1 5,0a2.5,2.5 0 1,1 -5,0" />
+</vector>
