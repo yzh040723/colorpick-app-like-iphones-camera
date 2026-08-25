@@ -1,0 +1,5 @@
+{"id":"4e6f7279-af5c-41eb-be2e-85a28c582cb0","from":"captain","to":"reviewer","content":"请开始 t3，先只读审查并输出风险；待其他成员完成后再复查。","ts":1786959457914}
+{"id":"07ffc423-1f71-4631-8e40-1620efac509c","from":"captain","to":"reviewer","content":"请立即开始 t3 的只读初审，检查当前工作区并输出动效 API/编译风险；完成后 update completed 或保留 in_progress 等待复查。","ts":1786959598358}
+{"id":"4847509a-7e4f-4309-acb3-fb149db11d30","from":"captain","to":"reviewer","content":"请继续 t3；若无法读取或审查，请明确报告阻塞，不要仅保持 idle。","ts":1786959679784}
+{"id":"e335f804-19f8-4724-9306-a12640c2dc82","from":"captain","to":"reviewer","content":"t1/t2 已完成，请现在做最终只读复审，重点检查 AnimatedContent API、AnimatedVisibility key、PhotoDetail Image 调用和版本文档一致性；完成后 update t3 completed 并给出阻断项。","ts":1786959838992}
+{"id":"39fda0a5-6eb7-4de1-832a-34d511633c8d","from":"captain","to":"reviewer","content":"请完成 t3 最终复审并更新为 completed，明确是否存在编译/API 阻断；不要继续保持 in_progress。","ts":1786959900945}

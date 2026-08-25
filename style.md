@@ -152,10 +152,36 @@ A single, unobstructed viewfinder is the hero; every control is a thin, white gl
 
 ## Motion
 
-- Entrance: `fadeIn(tween(150))` + `scaleIn(tween(150), initialScale = 0.95f)`.
-- Exit: `fadeOut(tween(150))`.
+- Page transitions between camera, crop, gallery and detail are immediate; no full-screen fade or scale is used, preventing preview flashing.
+- Filter bottom controls retain a short local `AnimatedContent` switch with fade and vertical slide; enter is 180ms and exit is 140ms.
+- Gallery grid items render immediately without a staggered entrance animation. Photo detail images use a restrained 160ms local fade after loading.
+- Detail browsing uses horizontal pager swipes; pinch zoom supports 1x–4x scale with pan while zoomed. Single-finger horizontal swipes change photos when the image is at 1x.
+- Gesture ownership is state-based: the pager owns single-finger swipes at 1x, while a zoomed image owns panning and multi-touch transforms. Double-tap toggles 1x and 2x.
+- Detail image entrance uses a direct scale-up from 0.86f to 1f over 180ms, with no opacity fade.
+- The top bar includes an image-info action that opens EXIF metadata in a readable dialog.
+- While a neighboring photo is decoding, the detail canvas stays black; the load-error label appears only after decoding has actually failed.
+- Pointer event reads use the gesture scope provided by `awaitEachGesture`; single-finger horizontal movement at 1x remains available to the pager, while multi-touch and zoomed panning are consumed by the image.
+- Save acknowledgement: “已保存” feedback enters over about 160ms and exits over 220ms, remaining visible for about 1.4s.
+- Press feedback: top controls use 100ms tween to 0.92 scale; filter actions use 100ms tween to 0.94 scale and increased panel brightness.
+- Focus lock color transition: 150ms tween. Exposure handle position follows changes with a 120ms tween.
 - Aspect-ratio change: cross-fade the mask, no layout animation on the bottom bar.
 - Filter card switch: horizontal pager snap, **no** per-card scale animation.
+
+## Gallery Photo Detail
+
+- Tapping a gallery thumbnail opens a full-screen black preview using `ContentScale.Fit`, preserving the photo's aspect ratio without cropping.
+- The top overlay provides a white back action on the left and system share action on the right; both remain readable over a translucent black scrim.
+- A bottom-right delete action opens a destructive confirmation dialog before removing the MediaStore item.
+- Successful deletion returns to the gallery; failed deletion remains on the detail screen and presents an error message.
+- Android back (including predictive-back compatible `BackHandler`) returns from detail to gallery without deleting the photo.
+
+## Motion Interaction Tokens
+
+- Standard icon touch target: 44dp; filter action touch target: at least 48dp.
+- Press feedback uses a subtle 0.92–0.94 scale and 100ms tween without bounce.
+- Focus lock color transitions to yellow over 150ms.
+- Exposure handle follows value changes with a 120ms tween; direct drag input remains immediate.
+- Long-press focus lock emits one haptic confirmation; no haptic feedback is emitted continuously during dragging.
 
 ## Current Implementation Notes
 

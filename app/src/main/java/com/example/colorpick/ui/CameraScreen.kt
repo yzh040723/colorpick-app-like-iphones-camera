@@ -10,6 +10,8 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.media.MediaActionSound
 import android.media.MediaScannerConnection
@@ -35,6 +37,8 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -47,6 +51,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import android.util.Range
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -61,6 +66,7 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -106,6 +112,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -129,6 +136,7 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -286,9 +294,29 @@ private fun CameraContent(
     }
 
     var lastPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var showSavedFeedback by remember { mutableStateOf(false) }
+    var showCaptureFlash by remember { mutableStateOf(false) }
+    var capturePreviewUri by remember { mutableStateOf<Uri?>(null) }
+    var capturePreviewRevision by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         lastPhotoUri = queryLastPhotoUri(context)
+    }
+
+    // Keep the save acknowledgement short and non-blocking: it confirms the capture
+    // without covering the camera controls for the next shot.
+    LaunchedEffect(showSavedFeedback) {
+        if (showSavedFeedback) {
+            delay(1_400)
+            showSavedFeedback = false
+        }
+    }
+
+    LaunchedEffect(showCaptureFlash) {
+        if (showCaptureFlash) {
+            delay(90)
+            showCaptureFlash = false
+        }
     }
 
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
@@ -347,13 +375,13 @@ private fun CameraContent(
     var showFocusIndicator by remember { mutableStateOf(false) }
     var exposureCompensationIndex by remember { mutableIntStateOf(0) }
     var previewSize by remember { mutableStateOf(Size(0, 0)) }
-    val zoomAnimatable = remember { Animatable(1f) }
+    var liveZoomRatio by remember { mutableFloatStateOf(1f) }
     val scope = rememberCoroutineScope()
     var rotationDegrees by remember { mutableIntStateOf(0) }
     var isSwitchingLens by remember { mutableStateOf(false) }
 
     LaunchedEffect(lensFacing) {
-        zoomAnimatable.snapTo(1f)
+        liveZoomRatio = 1f
         cameraControl?.setZoomRatio(1f)
     }
 
@@ -380,7 +408,6 @@ private fun CameraContent(
                         } else {
                             frameRotation
                         }
-                        rotationDegrees = adjustedRotation
                         val renderer = cameraFrameRenderer
                         renderer?.let {
                             try {
@@ -430,6 +457,13 @@ private fun CameraContent(
 
     val onTakePhoto = {
         rootView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+        showCaptureFlash = true
+        // A shutter press also starts a short center tap-to-focus pulse before capture.
+        val centerX = previewSize.width / 2f
+        val centerY = previewSize.height / 2f
+        performFocus(cameraControl, previewSize, centerX, centerY, lock = false)
+        focusPosition = Offset(centerX, centerY)
+        showFocusIndicator = true
         shutterSound.play(MediaActionSound.SHUTTER_CLICK)
         takePhoto(
             context,
@@ -438,10 +472,18 @@ private fun CameraContent(
             captureExecutor,
             resolvedParams,
             aspectRatio,
-            isPortrait
-        ) { uri ->
-            lastPhotoUri = uri
-        }
+            isPortrait,
+            onSaved = { uri ->
+                lastPhotoUri = uri
+                // Start the paper immediately after CameraX commits the capture.
+                capturePreviewUri = uri
+                capturePreviewRevision++
+                showSavedFeedback = true
+            },
+            onProcessed = { _ ->
+                // The same URI is updated in the background; do not restart the paper animation.
+            }
+        )
     }
 
     val previewRotation = rotationDegrees
@@ -450,7 +492,7 @@ private fun CameraContent(
 
     val handleZoomChange: (Float) -> Unit = { newZoom ->
         zoomAnimationJob?.cancel()
-        zoomAnimationJob = scope.launch { zoomAnimatable.snapTo(newZoom) }
+        liveZoomRatio = newZoom
         cameraControl?.setZoomRatio(newZoom)
     }
 
@@ -463,8 +505,14 @@ private fun CameraContent(
         // in sync and avoid the previous hard cut between presets.
         zoomAnimationJob?.cancel()
         zoomAnimationJob = scope.launch {
-            zoomAnimatable.animateTo(coerced, animationSpec = tween(200)) {
-                cameraControl?.setZoomRatio(this.value)
+            val start = liveZoomRatio
+            val steps = 10
+            repeat(steps) { index ->
+                val fraction = (index + 1) / steps.toFloat()
+                val value = start + (coerced - start) * fraction
+                liveZoomRatio = value
+                cameraControl?.setZoomRatio(value)
+                delay(20)
             }
         }
     }
@@ -476,6 +524,11 @@ private fun CameraContent(
             isPortrait = isPortrait,
             flashMode = flashMode,
             lastPhotoUri = lastPhotoUri,
+            showSavedFeedback = showSavedFeedback,
+            showCaptureFlash = showCaptureFlash,
+            capturePreviewUri = capturePreviewUri,
+            capturePreviewRevision = capturePreviewRevision,
+            onCapturePreviewFinished = { capturePreviewUri = null },
             showSixDotMenu = showSixDotMenu,
             showAspectRatioMenu = showAspectRatioMenu,
             onAspectRatioClick = { showAspectRatioMenu = true },
@@ -510,7 +563,7 @@ private fun CameraContent(
             onShowFocusIndicatorChange = { showFocusIndicator = it },
             onExposureCompensationIndexChange = { exposureCompensationIndex = it },
             onPreviewSizeChange = { previewSize = it },
-            zoomRatio = zoomAnimatable.value,
+            zoomRatio = liveZoomRatio,
             onZoomChange = handleZoomChange,
             onZoomPresetSelected = animateZoomTo,
             filterSelectionMode = filterSelectionMode,
@@ -627,6 +680,7 @@ private fun ViewfinderTapHandler(
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
+    val localView = LocalView.current
     var hideJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     // Use updated-state wrappers so the gesture detector is not recreated every time
@@ -656,6 +710,7 @@ private fun ViewfinderTapHandler(
                 detectTapGestures(
                     onLongPress = { offset ->
                         cancelAutoHide()
+                        localView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                         performFocus(
                             currentCameraControl,
                             currentPreviewSize,
@@ -940,15 +995,23 @@ private fun FilterModeActionButton(
     modifier: Modifier = Modifier,
     size: androidx.compose.ui.unit.Dp = 48.dp
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.94f else 1f,
+        animationSpec = tween(100),
+        label = "filterActionButtonScale"
+    )
     val shape = RoundedCornerShape(14.dp)
     Box(
         modifier = modifier
-            .size(size)
+            .size(size.coerceAtLeast(48.dp))
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(shape)
-            .background(Color.Black.copy(alpha = 0.45f))
+            .background(Color.Black.copy(alpha = if (isPressed) 0.62f else 0.45f))
             .border(0.5.dp, Color.White.copy(alpha = 0.15f), shape)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
             ),
@@ -1158,13 +1221,21 @@ private fun TopBarIconButton(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f,
+        animationSpec = tween(100),
+        label = "topBarButtonScale"
+    )
     Box(
         modifier = modifier
-            .size(40.dp)
+            .size(44.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.Black.copy(alpha = 0.32f))
+            .background(Color.Black.copy(alpha = if (isPressed) 0.5f else 0.32f))
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
             ),
@@ -1219,6 +1290,11 @@ private fun CameraControls(
     isPortrait: Boolean,
     flashMode: FlashMode,
     lastPhotoUri: Uri?,
+    showSavedFeedback: Boolean,
+    showCaptureFlash: Boolean,
+    capturePreviewUri: Uri?,
+    capturePreviewRevision: Int,
+    onCapturePreviewFinished: () -> Unit,
     showSixDotMenu: Boolean,
     showAspectRatioMenu: Boolean,
     onAspectRatioClick: () -> Unit,
@@ -1432,19 +1508,28 @@ private fun CameraControls(
                 .navigationBarsPadding()
                 .padding(horizontal = 24.dp, vertical = 16.dp)
         ) {
-            if (filterSelectionMode) {
-                FilterModeBottomPanel(
-                    viewModel = viewModel,
-                    onShutterClick = onShutterClick,
-                    onCloseFilter = onCloseFilter,
-                    filterCardsMinimized = filterCardsMinimized
-                )
-            } else {
-                BottomControlBar(
-                    lastPhotoUri = lastPhotoUri,
-                    onShutterClick = onShutterClick,
-                    onOpenGallery = onOpenGallery
-                )
+            AnimatedContent(
+                targetState = filterSelectionMode,
+                transitionSpec = {
+                    (fadeIn(tween(180)) + slideInVertically { it / 3 }) togetherWith
+                        (fadeOut(tween(140)) + slideOutVertically { it / 3 })
+                },
+                label = "cameraBottomControls"
+            ) { inFilterMode ->
+                if (inFilterMode) {
+                    FilterModeBottomPanel(
+                        viewModel = viewModel,
+                        onShutterClick = onShutterClick,
+                        onCloseFilter = onCloseFilter,
+                        filterCardsMinimized = filterCardsMinimized
+                    )
+                } else {
+                    BottomControlBar(
+                        lastPhotoUri = lastPhotoUri,
+                        onShutterClick = onShutterClick,
+                        onOpenGallery = onOpenGallery
+                    )
+                }
             }
         }
 
@@ -1575,6 +1660,47 @@ private fun CameraControls(
             }
         }
 
+        AnimatedVisibility(
+            visible = showSavedFeedback,
+            enter = fadeIn(tween(160)) + scaleIn(initialScale = 0.86f, animationSpec = spring(dampingRatio = 0.7f)) ,
+            exit = fadeOut(tween(220)) + scaleOut(targetScale = 0.92f, animationSpec = tween(220)),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color.Black.copy(alpha = 0.72f))
+                    .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(22.dp))
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+            ) {
+                Text("已保存", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+
+        // Immediate shutter confirmation. This short local flash does not wait for
+        // JPEG processing or MediaStore refresh.
+        capturePreviewUri?.let { uri ->
+            PolaroidCaptureAnimation(
+                uri = uri,
+                revision = capturePreviewRevision,
+                onFinished = onCapturePreviewFinished,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showCaptureFlash,
+            enter = fadeIn(tween(20)),
+            exit = fadeOut(tween(90)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFFFFF4D6).copy(alpha = 0.82f))
+            )
+        }
+
         // Floating top controls: fixed position from the top, independent of aspect ratio.
         // Drawn last so the zoom wheel never covers it.
         TopControlBar(
@@ -1597,6 +1723,107 @@ private fun CameraControls(
         )
     }
 }
+
+@Composable
+private fun PolaroidCaptureAnimation(
+    uri: Uri,
+    revision: Int,
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val bitmap by produceState<Bitmap?>(initialValue = null, uri, revision) {
+        value = withContext(Dispatchers.IO) {
+            try {
+                context.contentResolver.loadThumbnail(uri, Size(720, 960), null)
+            } catch (e: Exception) {
+                Log.e("CameraScreen", "Capture preview thumbnail failed", e)
+                null
+            }
+        }
+    }
+    val entranceProgress = remember { Animatable(0f) }
+    var isExiting by remember { mutableStateOf(false) }
+    val exitProgress = remember { Animatable(0f) }
+
+    LaunchedEffect(uri, revision) {
+        // Start immediately when the capture URI arrives: slide the paper from above
+        // into the center, hold it for two seconds, then send it to the thumbnail.
+        entranceProgress.snapTo(0f)
+        exitProgress.snapTo(0f)
+        isExiting = false
+        entranceProgress.animateTo(1f, animationSpec = tween(1_100, easing = FastOutSlowInEasing))
+        delay(1_000)
+        isExiting = true
+        exitProgress.animateTo(1f, animationSpec = tween(700, easing = FastOutSlowInEasing))
+        onFinished()
+    }
+
+    BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.TopCenter) {
+        val density = LocalDensity.current
+        // Larger paper gives the shot a tangible instant-camera feel while leaving
+        // enough margin for the camera controls underneath.
+        val cardWidth = 280.dp
+        val cardHeight = 366.dp
+        val startY = with(density) { -cardHeight.toPx() }
+        val centerX = 0f
+        val centerY = with(density) { (maxHeight - cardHeight).toPx() / 2f }
+        val endX = with(density) { -(maxWidth - 56.dp - cardWidth).toPx() / 2f }
+        val endY = with(density) { (maxHeight - 116.dp - cardHeight).toPx() }
+        val entrance = entranceProgress.value
+        val exit = exitProgress.value
+        val easedEntrance = entrance * entrance * (3f - 2f * entrance)
+        val easedExit = exit * exit * (3f - 2f * exit)
+        val x = if (isExiting) centerX + (endX - centerX) * easedExit else centerX
+        val y = if (isExiting) centerY + (endY - centerY) * easedExit
+        else startY + (centerY - startY) * easedEntrance
+        val scale = if (isExiting) 1f - 0.78f * easedExit else 1f
+        val alpha = if (isExiting) 1f - easedExit else 1f
+
+        Box(
+            modifier = Modifier
+                .graphicsLayer {
+                    translationX = x
+                    translationY = y
+                    scaleX = scale
+                    scaleY = scale
+                    this.alpha = alpha.coerceIn(0f, 1f)
+                    shadowElevation = 18.dp.toPx()
+                }
+                .width(cardWidth)
+                .height(cardHeight)
+                .background(Color.White)
+                .padding(10.dp)
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap!!.asImageBitmap(),
+                    contentDescription = "拍摄预览",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .background(Color(0xFFE8E8E8))
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 5.dp)
+                    .width(92.dp)
+                    .height(8.dp)
+                    .background(Color.Black.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+            )
+        }
+    }
+}
+
 
 @Composable
 private fun LensSwitchMask(visible: Boolean) {
@@ -1778,6 +2005,11 @@ private fun ThumbnailView(uri: Uri?, onClick: () -> Unit) {
 @Composable
 private fun FocusIndicator(position: Offset?, locked: Boolean, visible: Boolean) {
     val scale = remember { Animatable(1.3f) }
+    val animatedColor by animateColorAsState(
+        targetValue = if (locked) Color(0xFFFFD60A) else Color.White,
+        animationSpec = tween(150),
+        label = "focusIndicatorColor"
+    )
     LaunchedEffect(position, visible) {
         if (visible && position != null) {
             scale.snapTo(1.3f)
@@ -1812,7 +2044,7 @@ private fun FocusIndicator(position: Offset?, locked: Boolean, visible: Boolean)
                     val stroke = 2.5f
                     val cornerLength = w * 0.28f
                     val inset = w * 0.12f
-                    val color = if (locked) Color(0xFFFFD60A) else Color.White
+                    val color = animatedColor
 
                     // Top-left
                     drawLine(color, Offset(inset, inset), Offset(inset + cornerLength, inset), stroke)
@@ -1844,6 +2076,11 @@ private fun ExposureSlider(
         if (exposureRange.last == exposureRange.first) 0.5f
         else (currentIndex - exposureRange.first).toFloat() / (exposureRange.last - exposureRange.first).toFloat()
     }
+    val animatedFraction by animateFloatAsState(
+        targetValue = fraction.coerceIn(0f, 1f),
+        animationSpec = tween(120),
+        label = "exposureHandlePosition"
+    )
 
     Box(
         modifier = modifier
@@ -1874,7 +2111,7 @@ private fun ExposureSlider(
             }
 
             // Handle
-            val handleY = (1f - fraction) * h
+            val handleY = (1f - animatedFraction) * h
             val handleColor = if (locked) Color(0xFFFFD60A) else Color.White
             drawCircle(handleColor.copy(alpha = 0.9f), 9f, Offset(cx, handleY))
 
@@ -2715,13 +2952,17 @@ private fun takePhoto(
     params: AdjustmentParams,
     aspectRatio: AspectRatio,
     isPortrait: Boolean,
-    onComplete: (Uri?) -> Unit
+    onSaved: (Uri?) -> Unit,
+    onProcessed: (Uri) -> Unit
 ) {
+    val mainHandler = Handler(Looper.getMainLooper())
     val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     val displayName = "IMG_${timeStamp}.jpg"
+    val captureTime = System.currentTimeMillis()
     val contentValues = ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
         put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+        put(MediaStore.Images.Media.DATE_TAKEN, captureTime)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/ColorPick")
         }
@@ -2740,9 +2981,13 @@ private fun takePhoto(
             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                 val savedUri = output.savedUri
                 if (savedUri == null) {
-                    onComplete(null)
+                    onSaved(null)
                     return
                 }
+                // CameraX has already committed the captured JPEG to MediaStore. Notify the
+                // UI immediately so the thumbnail and save feedback do not wait for the
+                // optional GPU re-render, EXIF rewrite, and JPEG recompression below.
+                onSaved(savedUri)
                 captureExecutor.execute {
                     try {
                         val bitmap = loadBitmapFromUri(context, savedUri)
@@ -2762,11 +3007,16 @@ private fun takePhoto(
                             context.contentResolver.openFileDescriptor(savedUri, "rw")?.use { pfd ->
                                 val exif = ExifInterface(pfd.fileDescriptor)
                                 exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
-                                val exifDate = SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(Date())
+                                val captureDate = Date(captureTime)
+                                val exifDate = SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(captureDate)
                                 exif.setAttribute(ExifInterface.TAG_DATETIME, exifDate)
                                 exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, exifDate)
-                                val subSec = SimpleDateFormat("SSS", Locale.US).format(Date())
-                                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subSec)
+                                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, SimpleDateFormat("SSS", Locale.US).format(captureDate))
+                                exif.setAttribute(ExifInterface.TAG_IMAGE_WIDTH, source.width.toString())
+                                exif.setAttribute(ExifInterface.TAG_IMAGE_LENGTH, source.height.toString())
+                                exif.setAttribute(ExifInterface.TAG_SOFTWARE, "ColorPick beta 0.4.03")
+                                exif.setAttribute(ExifInterface.TAG_ARTIST, "ColorPick")
+                                exif.setAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION, "ColorPick photo")
                                 exif.saveAttributes()
                             }
 
@@ -2785,18 +3035,18 @@ private fun takePhoto(
                         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                             MediaScannerConnection.scanFile(context, arrayOf(savedUri.toString()), arrayOf("image/jpeg"), null)
                         }
+                        mainHandler.post { onProcessed(savedUri) }
 
-                        onComplete(savedUri)
                     } catch (e: Exception) {
+                        mainHandler.post { onProcessed(savedUri) }
                         Log.e("CameraScreen", "Photo processing failed", e)
-                        onComplete(savedUri)
                     }
                 }
             }
 
             override fun onError(exception: ImageCaptureException) {
                 Log.e("CameraScreen", "Photo capture failed", exception)
-                onComplete(null)
+                onSaved(null)
             }
         }
     )

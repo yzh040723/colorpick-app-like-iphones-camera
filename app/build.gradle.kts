@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.colorpick"
         minSdk = 26
         targetSdk = 36
-        versionCode = 201
-        versionName = "beta 0.2.02"
+        versionCode = 408
+        versionName = "beta 0.4.08"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

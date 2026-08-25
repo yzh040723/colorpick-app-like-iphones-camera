@@ -1,0 +1,96 @@
+{
+  "name": "colorpick-beta03-gallery",
+  "id": "colorpick-beta03-gallery",
+  "description": "为 ColorPick 开发 Beta 0.3 相册详情页与照片操作闭环：点击照片进入大图预览，支持返回、删除、分享，并完成自检、版本文档更新。",
+  "captainSessionId": "session-31438e14-9118-4200-aa01-0eed0420092f",
+  "createdAt": 1786955022918,
+  "members": [
+    {
+      "id": "152b726e-7cd5-4488-af29-875238cb570b",
+      "name": "engineer",
+      "role": "Android 工程师，负责相册详情页实现与路由改造",
+      "provider": "meta",
+      "model": "gpt-5.6-luna",
+      "joinedAt": 1786955033939,
+      "status": "idle"
+    },
+    {
+      "id": "00ca127b-4e9b-4676-9907-b3d85123a1b8",
+      "name": "reviewer",
+      "role": "代码审查与测试工程师，负责检查实现方案、风险和验收项",
+      "provider": "meta",
+      "model": "gpt-5.6-luna",
+      "joinedAt": 1786955033957,
+      "status": "idle"
+    },
+    {
+      "id": "8ee7aac2-3a34-4add-9dec-e75aefed2370",
+      "name": "docs",
+      "role": "版本文档维护者，负责 Beta 0.3 文档与日志更新建议",
+      "provider": "meta",
+      "model": "gpt-5.6-luna",
+      "joinedAt": 1786955033969,
+      "status": "idle"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "实现相册详情页闭环",
+      "description": "阅读现有 MainActivity、GalleryScreen 和存储逻辑，直接实现 Beta 0.3 相册详情页：点击照片进入大图预览，支持返回、删除、系统分享；按现有 Compose 风格实现，必要时修改路由与 GalleryScreen。完成后自检并汇报改动文件。",
+      "status": "completed",
+      "assignee": "engineer",
+      "dependencies": [],
+      "createdAt": 1786955054208,
+      "updatedAt": 1786955218821,
+      "output": "已实现相册详情路由与 PhotoDetailScreen：点击网格进入全屏预览，支持返回、ACTION_SEND 分享、确认删除并回到相册；GalleryScreen 增加 onPhotoClick 回调。修改 MainActivity.kt、GalleryScreen.kt，新建 PhotoDetailScreen.kt。Gradle 编译尝试因本机 Gradle wrapper 缓存锁文件被拒绝而失败。"
+    },
+    {
+      "id": "t2",
+      "subject": "审查详情页设计与验收",
+      "description": "独立阅读现有相册、导航和存储代码，提出相册详情页实现的关键风险、Android 分享/删除兼容性和验收清单。不要修改文件，完成后汇报。",
+      "status": "completed",
+      "assignee": "reviewer",
+      "dependencies": [],
+      "createdAt": 1786955054214,
+      "updatedAt": 1786955428864,
+      "output": "只读复查完成：PhotoDetailScreen 已加入 BackHandler，但 MainActivity 仍缺少 com.example.colorpick.ui.PhotoDetailScreen import，编译必失败。删除仍在主线程执行，异常被吞且无条件 onDeleted；deleting/scope 声明未实际使用，修复不完整。分享 ACTION_SEND 未捕获 ActivityNotFoundException。兼容性建议：MediaStore delete 处理 SecurityException/RecoverableSecurityException 并依据返回值回调；分享前 resolveActivity/try-catch；系统返回应回相册（现已具备）。验收清单：可编译、点击进入预览、系统/按钮返回、失效 URI、删除确认与取消、删除成功仅回调、删除失败留在详情并提示、分享无目标不崩溃、不同 Android API/权限场景。当前验收不通过，等待 engineer t4 完成。"
+    },
+    {
+      "id": "t3",
+      "subject": "准备Beta03版本文档",
+      "description": "阅读 README、style.md、log.md 当前内容，拟定 Beta 0.3 的版本号、更新日志和 README 需要同步的最小文案；先不要修改文件，汇报建议。",
+      "status": "completed",
+      "assignee": "docs",
+      "dependencies": [],
+      "createdAt": 1786955054219,
+      "updatedAt": 1786955245789,
+      "output": "已完成只读文档拟定：建议版本 beta 0.3.00、versionCode 300（当前 beta 0.2.02/201；以新 minor 版本启用 300，避免与 202 混淆）。README 最小更新：相册条目补充点击进入全屏详情、返回/删除确认/系统分享；版本改为 beta 0.3.00（versionCode 300）。log.md 顶部新增 beta 0.3.00 日志，记录相册详情页闭环、MediaStore 删除、ACTION_SEND 分享及回归测试项。style.md 在相册章节新增详情页视觉/交互规范：黑底全屏、ContentScale.Fit、顶部返回+分享、底部删除、删除二次确认。未修改文件（按只读要求）。"
+    },
+    {
+      "id": "t4",
+      "subject": "修复详情页审查问题",
+      "description": "根据 reviewer 反馈修复 PhotoDetailScreen：删除放到 IO 协程，依据 delete 返回值决定是否返回并在失败时提示；分享捕获无目标异常；接管系统返回键返回相册。完成后运行 git diff check 并更新任务状态。",
+      "status": "completed",
+      "assignee": "engineer",
+      "dependencies": [],
+      "createdAt": 1786955256818,
+      "updatedAt": 1786955479516,
+      "output": "已修复 PhotoDetailScreen：异步 IO 删除并检查 delete 返回值，失败提示且不返回；分享异常提示；BackHandler 返回相册。另由 captain 补齐 MainActivity 的 PhotoDetailScreen import。"
+    },
+    {
+      "id": "t5",
+      "subject": "更新Beta03项目文档",
+      "description": "在 t4 完成后，按 t3 建议实际修改 README.md、log.md、style.md，并将 app/build.gradle.kts 版本更新为 beta 0.3.00 / versionCode 300。完成后做文档一致性检查。",
+      "status": "completed",
+      "assignee": "docs",
+      "dependencies": [
+        "t4"
+      ],
+      "createdAt": 1786955289537,
+      "updatedAt": 1786955706356,
+      "output": "已更新 Beta 0.3 版本信息与项目文档：app/build.gradle.kts 使用 beta 0.3.00/versionCode 300；README、log.md、style.md 已同步相册详情页功能、视觉规范和测试重点。"
+    }
+  ],
+  "taskSeq": 5
+}

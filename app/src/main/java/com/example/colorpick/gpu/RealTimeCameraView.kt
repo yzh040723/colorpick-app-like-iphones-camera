@@ -36,7 +36,6 @@ fun RealTimeCameraView(
             val renderer = view.tag as? CameraFrameRenderer
             renderer?.let {
                 it.setParams(params)
-                it.setRotation(rotationDegrees)
                 it.setMirrored(isMirrored)
                 it.setViewport(viewportWidth, viewportHeight)
                 view.requestRender()

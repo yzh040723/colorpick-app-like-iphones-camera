@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import com.example.colorpick.ui.CameraScreen
 import com.example.colorpick.ui.CropScreen
 import com.example.colorpick.ui.GalleryScreen
+import com.example.colorpick.ui.PhotoDetailScreen
 import com.example.colorpick.ui.theme.ColorPickTheme
 
 class MainActivity : ComponentActivity() {
@@ -40,27 +41,37 @@ class MainActivity : ComponentActivity() {
 private fun AppNavigation() {
     var currentRoute by rememberSaveable { mutableStateOf<String>("camera") }
     var cropUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var detailUri by rememberSaveable { mutableStateOf<String?>(null) }
 
+    // Keep navigation immediate: the camera and gallery are full-screen tools,
+    // so page-level fades/scales make the preview flash during route changes.
     when (currentRoute) {
-        "camera" -> CameraScreen(
-            onNavigateToCrop = { uri ->
-                cropUri = uri
-                currentRoute = "crop"
-            },
-            onNavigateToGallery = {
-                currentRoute = "gallery"
-            }
-        )
-        "crop" -> cropUri?.let { uri ->
-            CropScreen(
-                photoUri = uri,
-                onBack = { currentRoute = "camera" }
+            "camera" -> CameraScreen(
+                onNavigateToCrop = { uri ->
+                    cropUri = uri
+                    currentRoute = "crop"
+                },
+                onNavigateToGallery = { currentRoute = "gallery" }
             )
-        } ?: run {
-            currentRoute = "camera"
-        }
-        "gallery" -> GalleryScreen(
-            onBack = { currentRoute = "camera" }
-        )
+            "crop" -> cropUri?.let { uri ->
+                CropScreen(photoUri = uri, onBack = { currentRoute = "camera" })
+            } ?: run { currentRoute = "camera" }
+            "gallery" -> GalleryScreen(
+                onBack = { currentRoute = "camera" },
+                onPhotoClick = { uri ->
+                    detailUri = uri.toString()
+                    currentRoute = "detail"
+                }
+            )
+            "detail" -> detailUri?.let { uriString ->
+                PhotoDetailScreen(
+                    photoUri = Uri.parse(uriString),
+                    onBack = { currentRoute = "gallery" },
+                    onDeleted = {
+                        detailUri = null
+                        currentRoute = "gallery"
+                    }
+                )
+            } ?: run { currentRoute = "gallery" }
     }
 }

@@ -78,6 +78,7 @@ private data class GalleryPhoto(val uri: Uri, val dateAdded: Long)
 @Composable
 fun GalleryScreen(
     onBack: () -> Unit,
+    onPhotoClick: (Uri) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -205,8 +206,7 @@ fun GalleryScreen(
                             if (selectionMode) {
                                 selected = if (photo.uri in selected) selected - photo.uri else selected + photo.uri
                                 if (selected.isEmpty()) selectionMode = false
-                            }
-                            // Photo detail view is out of scope for now.
+                            } else onPhotoClick(photo.uri)
                         },
                         onLongClick = {
                             selectionMode = true
